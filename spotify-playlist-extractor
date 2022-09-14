@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+
+#   Spotify Playlist Extractor - Extracts song names from a Spotify playlist to a text file.
+#   Copyright (C) 2022  Kerem Biçen
+
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+import re
+import requests
+import keyring
+import math
+
+headers = {"Authorization": f"Bearer {keyring.get_password('spotify', 'token')}"}
+
+def main(args):
+	if not re.match(r"^\w+$", args[1]):
+		print("Playlist ID is invalid.")
+		return
+	tracks = []
+	try:
+		playlist = requests.get(f"https://api.spotify.com/v1/playlists/{args[1]}", headers=headers, params={"fields": "name, tracks(total)"})
+		playlist.raise_for_status()
+		playlist = playlist.json()
+		for i in range(math.ceil(playlist["tracks"]["total"] / 100)):
+			tracks_temp = requests.get(f"https://api.spotify.com/v1/playlists/{args[1]}/tracks", headers=headers, params={"fields": "items(track(name, album(name, artists)))", "offset": i * 100, "limit": 100}).json()
+			tracks.extend([f"{', '.join([artist['name'] for artist in track['track']['album']['artists']])} - {track['track']['album']['name']} - {track['track']['name']}" for track in tracks_temp["items"]])
+		with open(f"{playlist['name']}.txt", "w", encoding="utf-8") as file:
+			file.write("\n".join(tracks))
+	except requests.exceptions.HTTPError as e:
+		if e.response.status_code == 404:
+			print(f"Playlist not found.")
+
+if __name__ == "__main__":
+    import sys
+    try:
+        main(sys.argv)
+    except KeyboardInterrupt:
+        pass
